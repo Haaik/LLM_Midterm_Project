@@ -1,0 +1,20 @@
+From: newsletter@github.com
+Subject: GitHub Digest - May 2026
+
+Hello Hayk,
+
+Here is your monthly GitHub activity digest.
+
+You have 3 open pull requests and 2 pending code reviews.
+
+Visit your dashboard: https://github.com/dashboard
+
+New features this month:
+- GitHub Copilot now supports Python 3.14
+- Improved Actions runner performance
+
+To unsubscribe from these emails, click here:
+https://github.com/settings/notifications
+
+Thanks,
+The GitHub Team

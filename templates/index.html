@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phishing Email Analyzer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #f78166;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  header h1 {
+    font-size: 1.7rem;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+  }
+  header p {
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 0.9rem;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  textarea {
+    width: 100%;
+    height: 260px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'Consolas', monospace;
+    font-size: 0.85rem;
+    padding: 12px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .sample-btns {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+  }
+  .btn-sample {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: var(--radius);
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sample:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-analyze {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--accent);
+    color: #0d1117;
+    font-weight: 700;
+    font-size: 1rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn-analyze:hover { opacity: 0.85; }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Status bar */
+  #status-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Agent progress */
+  .agents-progress {
+    display: flex;
+    gap: 6px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .agent-pill {
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+  .agent-pill.active  { border-color: var(--accent); color: var(--accent); }
+  .agent-pill.done    { border-color: var(--green);  color: var(--green);  }
+
+  /* Results right column */
+  #results { display: none; }
+
+  /* Verdict banner */
+  #verdict-banner {
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  #verdict-banner .verdict-label {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+  #verdict-banner .verdict-conf {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    opacity: 0.75;
+  }
+  .verdict-SAFE      { background: #1a2e1a; border: 1px solid var(--green); color: var(--green); }
+  .verdict-SUSPICIOUS{ background: #2e2a1a; border: 1px solid var(--yellow); color: var(--yellow); }
+  .verdict-PHISHING  { background: #2e1a1a; border: 1px solid var(--red); color: var(--red); }
+
+  /* Score pills */
+  .scores {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .score-box {
+    flex: 1;
+    min-width: 130px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .score-box .score-val { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+  .score-box .score-name { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .score-box .score-just { font-size: 0.75rem; color: var(--muted); margin-top: 6px; text-align: left; }
+
+  /* Agent cards */
+  .agent-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .agent-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    gap: 8px;
+  }
+  .agent-card-header:hover { background: #1c2128; }
+  .agent-card-header .agent-title { font-size: 0.85rem; font-weight: 600; }
+  .agent-card-header .agent-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .badge-LOW      { background: #1a2e1a; color: var(--green); }
+  .badge-MEDIUM   { background: #2e2a1a; color: var(--yellow); }
+  .badge-HIGH     { background: #2e221a; color: #e8832a; }
+  .badge-CRITICAL { background: #2e1a1a; color: var(--red); }
+  .badge-UNKNOWN  { background: #1e2430; color: var(--muted); }
+  .chevron { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; }
+  .agent-card.open .chevron { transform: rotate(180deg); }
+  .agent-card-body {
+    display: none;
+    padding: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .agent-card.open .agent-card-body { display: block; }
+
+  /* Key-value rows */
+  .kv { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.82rem; flex-wrap: wrap; }
+  .kv .k { color: var(--muted); min-width: 130px; flex-shrink: 0; }
+  .kv .v { color: var(--text); word-break: break-all; }
+  .list-items { margin: 6px 0 10px 0; }
+  .list-items li { font-size: 0.82rem; color: var(--text); margin-bottom: 4px; padding-left: 14px; position: relative; }
+  .list-items li::before { content: "•"; position: absolute; left: 0; color: var(--accent); }
+  .section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 10px 0 4px; }
+  .summary-text { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
+
+  /* Recommendations */
+  .rec-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    font-size: 0.82rem; margin-bottom: 6px;
+  }
+  .rec-arrow { color: var(--accent); flex-shrink: 0; }
+
+  /* Error */
+  .error-box {
+    background: #2e1a1a;
+    border: 1px solid var(--red);
+    border-radius: var(--radius);
+    padding: 14px;
+    color: var(--red);
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#x1F6E1; Phishing Email Analyzer</h1>
+  <p>5-Agent AI System &nbsp;|&nbsp; Powered by GPT-4o-mini</p>
+</header>
+
+<div class="layout">
+  <!-- LEFT: Input -->
+  <div class="panel">
+    <h2>Email Input</h2>
+    <textarea id="email-input" placeholder="Paste the raw email content here..."></textarea>
+
+    <div class="sample-btns">
+      <span style="font-size:0.75rem;color:var(--muted);align-self:center;">Load sample:</span>
+      <button class="btn-sample" onclick="loadSample('phishing')">Phishing</button>
+      <button class="btn-sample" onclick="loadSample('legitimate')">Legitimate</button>
+      <button class="btn-sample" onclick="loadSample('bec')">BEC</button>
+    </div>
+
+    <button class="btn-analyze" id="btn-analyze" onclick="analyze()">Analyze Email</button>
+
+    <div id="status-bar">
+      <div class="spinner"></div>
+      <span id="status-text">Starting analysis...</span>
+    </div>
+
+    <div class="agents-progress">
+      <div class="agent-pill" id="pill1">1 · Parser</div>
+      <div class="agent-pill" id="pill2">2 · URL Hunter</div>
+      <div class="agent-pill" id="pill3">3 · Text Analyst</div>
+      <div class="agent-pill" id="pill4">4 · Synthesizer</div>
+      <div class="agent-pill" id="pill5">5 · Critic</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div class="panel" id="results">
+    <h2>Analysis Results</h2>
+
+    <div id="verdict-banner"></div>
+
+    <div class="scores" id="scores-row"></div>
+
+    <div id="key-evidence-section"></div>
+    <div id="recs-section"></div>
+    <div id="conflicts-section"></div>
+    <div id="fps-section"></div>
+    <div id="summary-section"></div>
+
+    <div style="margin:16px 0 8px;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Agent Details</div>
+    <div id="agent-cards"></div>
+  </div>
+</div>
+
+<script>
+const SAMPLES = {
+  phishing: `From: security-alert@paypa1-support.com
+To: victim@example.com
+Subject: URGENT: Your PayPal account has been limited!
+
+Dear Customer,
+
+We have noticed unusual activity on your PayPal account. Your account has been temporarily limited.
+
+To restore full access, please verify your information immediately:
+http://paypa1-secure-login.xyz/verify?token=abc123
+
+Failure to verify within 24 hours will result in permanent account suspension.
+
+PayPal Security Team`,
+
+  legitimate: `From: newsletter@github.com
+To: developer@example.com
+Subject: GitHub Digest — Your weekly summary
+
+Hi there,
+
+Here's your weekly GitHub activity summary for the week of May 19, 2025.
+
+- 3 pull requests merged
+- 12 new stars on your repositories
+- 2 new followers
+
+View your full activity at https://github.com/notifications
+
+Thanks,
+The GitHub Team`,
+
+  bec: `From: ceo.michael.harris@company-corp.net
+To: accountant@targetcompany.com
+Subject: Confidential Wire Transfer Needed
+
+Hi,
+
+I'm currently in a meeting and need you to process an urgent wire transfer of $47,500 to a new vendor account before end of day. This is time-sensitive and must be kept confidential.
+
+Vendor: Global Solutions Ltd
+Account: 8823991042
+Routing: 021000021
+
+Please confirm once done. Do not discuss with other staff.
+
+Best,
+Michael Harris
+CEO`
+};
+
+function loadSample(type) {
+  document.getElementById('email-input').value = SAMPLES[type];
+}
+
+function badgeClass(level) {
+  const map = { LOW:'badge-LOW', MEDIUM:'badge-MEDIUM', HIGH:'badge-HIGH', CRITICAL:'badge-CRITICAL' };
+  return map[level] || 'badge-UNKNOWN';
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function makeList(items, limit=10) {
+  if (!items || !items.length) return '<span style="color:var(--muted);font-size:0.82rem">None</span>';
+  return '<ul class="list-items">' +
+    items.slice(0, limit).map(i => `<li>${escHtml(typeof i==='object'?JSON.stringify(i):i)}</li>`).join('') +
+  '</ul>';
+}
+
+function kv(label, val) {
+  if (val === undefined || val === null || val === '') return '';
+  return `<div class="kv"><span class="k">${escHtml(label)}</span><span class="v">${escHtml(val)}</span></div>`;
+}
+
+function agentCard(num, title, threatLevel, bodyHtml) {
+  return `
+  <div class="agent-card" id="card${num}">
+    <div class="agent-card-header" onclick="toggleCard(${num})">
+      <span class="agent-title">Agent ${num} — ${escHtml(title)}</span>
+      <span style="display:flex;gap:6px;align-items:center;">
+        ${threatLevel ? `<span class="agent-badge ${badgeClass(threatLevel)}">${escHtml(threatLevel)}</span>` : ''}
+        <span class="chevron">&#9660;</span>
+      </span>
+    </div>
+    <div class="agent-card-body">${bodyHtml}</div>
+  </div>`;
+}
+
+function toggleCard(num) {
+  const card = document.getElementById('card' + num);
+  card.classList.toggle('open');
+}
+
+let state = {};
+
+function setPill(num, status) {
+  const pill = document.getElementById('pill' + num);
+  pill.className = 'agent-pill ' + (status === 'active' ? 'active' : status === 'done' ? 'done' : '');
+}
+
+function analyze() {
+  const emailText = document.getElementById('email-input').value.trim();
+  if (!emailText) { alert('Please paste an email first.'); return; }
+
+  state = {};
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('agent-cards').innerHTML = '';
+  document.getElementById('verdict-banner').innerHTML = '';
+  document.getElementById('scores-row').innerHTML = '';
+  document.getElementById('key-evidence-section').innerHTML = '';
+  document.getElementById('recs-section').innerHTML = '';
+  document.getElementById('conflicts-section').innerHTML = '';
+  document.getElementById('fps-section').innerHTML = '';
+  document.getElementById('summary-section').innerHTML = '';
+
+  [1,2,3,4,5].forEach(n => setPill(n, ''));
+
+  document.getElementById('btn-analyze').disabled = true;
+  const statusBar = document.getElementById('status-bar');
+  statusBar.style.display = 'flex';
+  document.getElementById('status-text').textContent = 'Starting analysis...';
+
+  const form = new FormData();
+  form.append('email_text', emailText);
+
+  const evtSource = new EventSource('/analyze?' + new URLSearchParams([['_', Date.now()]]));
+  // Actually use fetch + ReadableStream for POST
+  evtSource.close();
+
+  fetchStream('/analyze', emailText);
+}
+
+async function fetchStream(url, emailText) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'email_text=' + encodeURIComponent(emailText),
+  });
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop();
+    for (const part of parts) {
+      parseSSE(part);
+    }
+  }
+}
+
+function parseSSE(raw) {
+  const lines = raw.trim().split('\n');
+  let eventName = 'message', dataStr = '';
+  for (const line of lines) {
+    if (line.startsWith('event:')) eventName = line.slice(6).trim();
+    if (line.startsWith('data:'))  dataStr  = line.slice(5).trim();
+  }
+  if (!dataStr) return;
+  try {
+    const data = JSON.parse(dataStr);
+    handleEvent(eventName, data);
+  } catch(e) { console.error('SSE parse error', e); }
+}
+
+function handleEvent(name, data) {
+  const statusText = document.getElementById('status-text');
+
+  if (name === 'status') {
+    statusText.textContent = data.message;
+    setPill(data.agent, 'active');
+    return;
+  }
+
+  if (name === 'error') {
+    document.getElementById('status-bar').style.display = 'none';
+    document.getElementById('btn-analyze').disabled = false;
+    document.getElementById('agent-cards').innerHTML =
+      `<div class="error-box">Error: ${escHtml(data.message)}</div>`;
+    document.getElementById('results').style.display = 'block';
+    return;
+  }
+
+  if (name === 'agent1') {
+    setPill(1, 'done');
+    state.agent1 = data;
+    const body = `
+      ${kv('Sender', data.sender_address)}
+      ${kv('Display Name', data.sender_display_name)}
+      ${kv('Reply-To', data.reply_to)}
+      ${kv('Subject', data.subject)}
+      ${kv('Attack Class', data.attack_classification)}
+      ${kv('Target Type', data.target_type)}
+      ${kv('Initial Risk', data.initial_risk_level)}
+      ${kv('HTML Detected', data.html_content_detected)}
+      ${kv('Attachments', data.attachments_mentioned)}
+      ${data.spoofing_indicators?.length ? '<div class="section-label">Spoofing Indicators</div>' + makeList(data.spoofing_indicators) : ''}
+      ${data.triage_notes ? '<div class="section-label">Triage Notes</div><p class="summary-text">' + escHtml(data.triage_notes) + '</p>' : ''}
+    `;
+    document.getElementById('agent-cards').insertAdjacentHTML('beforeend',
+      agentCard(1, 'Email Parser & Triage', data.initial_risk_level, body));
+    document.getElementById('results').style.display = 'block';
+    return;
+  }
+
+  if (name === 'agent2') {
+    setPill(2, 'done');
+    state.agent2 = data;
+    let urlsHtml = '';
+    if (data.url_analyses && data.url_analyses.length) {
+      urlsHtml = '<div class="section-label">URL Analyses</div>';
+      data.url_analyses.forEach(u => {
+        urlsHtml += `<div style="margin-bottom:10px;">
+          <div class="kv"><span class="k">URL</span><span class="v">${escHtml(u.url)}</span></div>
+          <div class="kv"><span class="k">Threat Score</span><span class="v">${escHtml(u.threat_score)}/10</span></div>
+          ${u.notes ? `<div class="kv"><span class="k">Notes</span><span class="v">${escHtml(u.notes)}</span></div>` : ''}
+          ${u.threat_indicators?.length ? makeList(u.threat_indicators) : ''}
+        </div>`;
+      });
+    }
+    const body = `
+      ${kv('URLs Found', data.urls_found)}
+      ${kv('Overall Threat', data.overall_threat)}
+      ${data.key_indicators?.length ? '<div class="section-label">Key Indicators</div>' + makeList(data.key_indicators) : ''}
+      ${urlsHtml}
+      ${data.summary ? '<div class="section-label">Summary</div><p class="summary-text">' + escHtml(data.summary) + '</p>' : ''}
+    `;
+    document.getElementById('agent-cards').insertAdjacentHTML('beforeend',
+      agentCard(2, 'OSINT & URL Threat Hunter', data.overall_threat, body));
+    return;
+  }
+
+  if (name === 'agent3') {
+    setPill(3, 'done');
+    state.agent3 = data;
+    let tacticsHtml = '';
+    if (data.social_engineering_tactics?.length) {
+      tacticsHtml = '<div class="section-label">Social Engineering Tactics</div><ul class="list-items">';
+      data.social_engineering_tactics.forEach(t => {
+        if (typeof t === 'object') {
+          tacticsHtml += `<li><strong>[${escHtml(t.severity)}] ${escHtml(t.tactic)}</strong>`;
+          if (t.evidence) tacticsHtml += ` — <em>${escHtml(String(t.evidence).slice(0,100))}</em>`;
+          tacticsHtml += '</li>';
+        } else {
+          tacticsHtml += `<li>${escHtml(t)}</li>`;
+        }
+      });
+      tacticsHtml += '</ul>';
+    }
+    const body = `
+      ${kv('Overall Threat', data.overall_threat)}
+      ${kv('Confidence', data.confidence != null ? data.confidence + '%' : null)}
+      ${kv('Language Quality', data.language_quality)}
+      ${kv('Generic Greeting', data.generic_greeting)}
+      ${tacticsHtml}
+      ${data.suspicious_requests?.length ? '<div class="section-label">Suspicious Requests</div>' + makeList(data.suspicious_requests) : ''}
+      ${data.impersonation_targets?.length ? '<div class="section-label">Impersonation Targets</div>' + makeList(data.impersonation_targets) : ''}
+      ${data.summary ? '<div class="section-label">Summary</div><p class="summary-text">' + escHtml(data.summary) + '</p>' : ''}
+    `;
+    document.getElementById('agent-cards').insertAdjacentHTML('beforeend',
+      agentCard(3, 'Social Engineering Analyst', data.overall_threat, body));
+    return;
+  }
+
+  if (name === 'agent4') {
+    setPill(4, 'done');
+    state.agent4 = data;
+    const body = `
+      ${kv('Attack Pattern', data.attack_pattern)}
+      ${kv('MITRE Technique', data.mitre_technique)}
+      ${kv('Kill Chain Stage', data.kill_chain_stage)}
+      ${kv('Attack Goal', data.attack_goal)}
+      ${kv('Likely Target', data.likely_target)}
+      ${kv('Threat Actor Type', data.threat_actor_type)}
+      ${kv('Combined Severity', data.combined_severity)}
+      ${data.corroborating_evidence?.length ? '<div class="section-label">Corroborating Evidence</div>' + makeList(data.corroborating_evidence) : ''}
+      ${data.conflicting_signals?.length ? '<div class="section-label">Conflicting Signals</div>' + makeList(data.conflicting_signals) : ''}
+      ${data.synthesis_summary ? '<div class="section-label">Synthesis Summary</div><p class="summary-text">' + escHtml(data.synthesis_summary) + '</p>' : ''}
+    `;
+    document.getElementById('agent-cards').insertAdjacentHTML('beforeend',
+      agentCard(4, 'Threat Intel Synthesizer', data.combined_severity, body));
+    return;
+  }
+
+  if (name === 'agent5') {
+    setPill(5, 'done');
+    state.agent5 = data;
+    renderFinalVerdict(data);
+
+    const body = `
+      ${kv('Verdict', data.verdict)}
+      ${kv('Confidence', data.confidence != null ? data.confidence + '%' : null)}
+      ${data.agent_validations ? (() => {
+        const av = data.agent_validations;
+        return '<div class="section-label">Agent Validations</div>' +
+          Object.entries(av).map(([k,v]) => `<div class="kv"><span class="k">${escHtml(k)}</span><span class="v">${escHtml(v)}</span></div>`).join('');
+      })() : ''}
+    `;
+    document.getElementById('agent-cards').insertAdjacentHTML('beforeend',
+      agentCard(5, 'Security Critic & Risk Scorer', null, body));
+    return;
+  }
+
+  if (name === 'done') {
+    document.getElementById('status-bar').style.display = 'none';
+    document.getElementById('btn-analyze').disabled = false;
+    statusText.textContent = 'Done.';
+  }
+}
+
+function renderFinalVerdict(data) {
+  const verdict = (data.verdict || 'UNKNOWN').toUpperCase();
+  const banner = document.getElementById('verdict-banner');
+  banner.className = 'verdict-' + verdict;
+  banner.innerHTML = `
+    <div class="verdict-label">${escHtml(verdict)}</div>
+    <div class="verdict-conf">Confidence: ${escHtml(data.confidence ?? '?')}%</div>
+  `;
+
+  const scores = document.getElementById('scores-row');
+  scores.innerHTML = `
+    <div class="score-box">
+      <div class="score-val">${escHtml(data.faithfulness_score ?? '?')}/5</div>
+      <div class="score-name">Faithfulness</div>
+      <div class="score-just">${escHtml(data.faithfulness_justification ?? '')}</div>
+    </div>
+    <div class="score-box">
+      <div class="score-val">${escHtml(data.completeness_score ?? '?')}/5</div>
+      <div class="score-name">Completeness</div>
+      <div class="score-just">${escHtml(data.completeness_justification ?? '')}</div>
+    </div>
+  `;
+
+  if (data.key_evidence?.length) {
+    document.getElementById('key-evidence-section').innerHTML =
+      '<div class="section-label">Key Evidence</div>' + makeList(data.key_evidence);
+  }
+
+  if (data.recommendations?.length) {
+    const html = data.recommendations.map(r =>
+      `<div class="rec-item"><span class="rec-arrow">&#8594;</span><span>${escHtml(r)}</span></div>`
+    ).join('');
+    document.getElementById('recs-section').innerHTML =
+      '<div class="section-label">Recommendations</div>' + html;
+  }
+
+  if (data.cross_agent_conflicts?.length) {
+    document.getElementById('conflicts-section').innerHTML =
+      '<div class="section-label">Cross-Agent Conflicts</div>' + makeList(data.cross_agent_conflicts);
+  }
+
+  if (data.false_positives?.length) {
+    document.getElementById('fps-section').innerHTML =
+      '<div class="section-label">Possible False Positives</div>' + makeList(data.false_positives);
+  }
+
+  if (data.threat_summary) {
+    document.getElementById('summary-section').innerHTML =
+      '<div class="section-label">Threat Summary</div><p class="summary-text">' + escHtml(data.threat_summary) + '</p>';
+  }
+}
+</script>
+</body>
+</html>
