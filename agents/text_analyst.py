@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+from tools.input_sanitizer import scan_for_injection, wrap_email_for_agent
+from tools.output_validator import validate_text_analyst
 
 
 class TextAnalyst:
@@ -9,9 +11,12 @@ class TextAnalyst:
         self._system_prompt = Path("prompts/text_analyst.txt").read_text(encoding="utf-8")
 
     def analyze(self, email_text: str) -> dict:
+        injection_scan = scan_for_injection(email_text)
+        wrapped = wrap_email_for_agent(email_text, injection_scan)
+
         user_message = (
             "Analyze the following email for phishing and social engineering indicators.\n\n"
-            f"--- EMAIL START ---\n{email_text}\n--- EMAIL END ---\n\n"
+            f"{wrapped}\n\n"
             "Provide your structured analysis as JSON."
         )
 
@@ -31,6 +36,14 @@ class TextAnalyst:
             result = json.loads(raw)
         except Exception:
             result = {"parse_error": True, "raw_response": raw}
+
+        result = validate_text_analyst(result)
+
+        # Merge pre-LLM injection scan
+        if injection_scan["injection_detected"] and not result.get("ai_manipulation_attempt"):
+            result["ai_manipulation_attempt"] = True
+            existing = result.get("ai_manipulation_evidence", [])
+            result["ai_manipulation_evidence"] = existing + injection_scan["injection_snippets"]
 
         result["agent_system_prompt"] = self._system_prompt
         result["agent_user_prompt"] = user_message

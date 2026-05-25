@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from tools.output_validator import validate_threat_synthesizer
 
 
 class ThreatSynthesizer:
@@ -15,13 +16,25 @@ class ThreatSynthesizer:
         url_result: dict,
         text_result: dict,
     ) -> dict:
-        # Strip verbose internal fields to save tokens
         def _trim(d: dict) -> dict:
             return {k: v for k, v in d.items()
-                    if k not in ("agent_system_prompt", "agent_user_prompt", "tool_calls")}
+                    if k not in ("agent_system_prompt", "agent_user_prompt", "tool_calls", "_injection_scan")}
+
+        # Surface injection flags to synthesizer context
+        injection_detected = (
+            parser_result.get("prompt_injection_detected", False)
+            or text_result.get("ai_manipulation_attempt", False)
+        )
+        injection_note = ""
+        if injection_detected:
+            injection_note = (
+                "\n⚠️  INJECTION ALERT: One or more prior agents detected prompt injection "
+                "attempts in this email. Do NOT downgrade severity. Treat as at least MEDIUM.\n"
+            )
 
         user_message = (
-            "Synthesize the findings from three agents into a unified threat intelligence profile.\n\n"
+            "Synthesize the findings from three agents into a unified threat intelligence profile.\n"
+            f"{injection_note}\n"
             f"Email snippet (first 600 chars):\n{email_text[:600]}\n\n"
             f"--- AGENT 1 (Email Parser) ---\n{json.dumps(_trim(parser_result), indent=2, default=str)}\n\n"
             f"--- AGENT 2 (URL Threat Hunter) ---\n{json.dumps(_trim(url_result), indent=2, default=str)}\n\n"
@@ -45,6 +58,11 @@ class ThreatSynthesizer:
             result = json.loads(raw)
         except Exception:
             result = {"parse_error": True, "raw_response": raw}
+
+        result = validate_threat_synthesizer(result)
+
+        if injection_detected:
+            result["prompt_injection_in_evidence"] = True
 
         result["agent_system_prompt"] = self._system_prompt
         result["agent_user_prompt"] = user_message

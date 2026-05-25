@@ -303,6 +303,9 @@
   <div class="panel" id="results">
     <h2>Analysis Results</h2>
 
+    <div id="injection-banner" style="display:none;background:#2a1f0a;border:1px solid #e8832a;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:0.83rem;color:#e8832a;">
+      &#9888; <strong>PROMPT INJECTION DETECTED</strong> — This email contains text attempting to manipulate AI analysis systems. The system has resisted the attack and flagged it as a threat indicator.
+    </div>
     <div id="verdict-banner"></div>
 
     <div class="scores" id="scores-row"></div>
@@ -512,6 +515,10 @@ function handleEvent(name, data) {
   if (name === 'agent1') {
     setPill(1, 'done');
     state.agent1 = data;
+    if (data.prompt_injection_detected) {
+      document.getElementById('injection-banner').style.display = 'block';
+      document.getElementById('results').style.display = 'block';
+    }
     const body = `
       ${kv('Sender', data.sender_address)}
       ${kv('Display Name', data.sender_display_name)}
@@ -637,6 +644,9 @@ function handleEvent(name, data) {
 }
 
 function renderFinalVerdict(data) {
+  if (data.prompt_injection_detected) {
+    document.getElementById('injection-banner').style.display = 'block';
+  }
   const verdict = (data.verdict || 'UNKNOWN').toUpperCase();
   const banner = document.getElementById('verdict-banner');
   banner.className = 'verdict-' + verdict;

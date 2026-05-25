@@ -4,6 +4,8 @@ from pathlib import Path
 from tools.url_extractor import extract_urls
 from tools.whois_lookup import whois_lookup
 from tools.virustotal import virustotal_lookup
+from tools.input_sanitizer import scan_for_injection, wrap_email_for_agent
+from tools.output_validator import validate_url_hunter
 
 BRANDS = [
     "paypal", "amazon", "google", "microsoft", "apple", "facebook",
@@ -78,6 +80,9 @@ class URLThreatHunter:
         self._system_prompt = Path("prompts/url_threat_hunter.txt").read_text(encoding="utf-8")
 
     def analyze(self, email_text: str) -> dict:
+        injection_scan = scan_for_injection(email_text)
+        wrapped = wrap_email_for_agent(email_text, injection_scan)
+
         urls = extract_urls(email_text)
         tool_calls = []
         url_data = []
@@ -96,7 +101,7 @@ class URLThreatHunter:
             url_data.append(info)
 
         user_message = (
-            f"Email snippet (first 800 chars):\n{email_text[:800]}\n\n"
+            f"Email snippet (first 800 chars):\n{wrapped[:900]}\n\n"
             f"Extracted URLs with technical analysis ({len(urls)} total):\n"
             f"{json.dumps(url_data, indent=2, default=str)}\n\n"
             "Provide your structured threat analysis as JSON."
@@ -119,6 +124,7 @@ class URLThreatHunter:
         except Exception:
             result = {"parse_error": True, "raw_response": raw}
 
+        result = validate_url_hunter(result)
         result["urls_found"] = len(urls)
         result["tool_calls"] = tool_calls
         result["agent_system_prompt"] = self._system_prompt
